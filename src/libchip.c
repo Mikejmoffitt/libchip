@@ -449,6 +449,17 @@ uint16_t *chip_get_wave(unsigned int channel)
 	return ch->wave_data;
 }
 
+unsigned int get_is_user_wave(unsigned int channel)
+{
+	if (channel >= chip_num_channels)
+	{
+		fprintf(stderr,"[audio] Error: Channel out of range (%d > %d)\n",channel,chip_num_channels);
+		return 0;
+	}
+	chip_channel *ch = &chip_channels[channel];
+	return !ch->own_wave;
+}
+
 unsigned int chip_get_wave_len(unsigned int channel)
 {
 	if (channel >= chip_num_channels)
