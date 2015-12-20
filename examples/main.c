@@ -7,9 +7,9 @@
 #include <libchip.h>
 
 #define EX_RATE 44100
-#define EX_BUFFER_LEN 512
-#define EX_NUM_BUFFERS 4
-#define EX_OVERSAMPLE 512
+#define EX_BUFFER_LEN 256
+#define EX_NUM_BUFFERS 8
+#define EX_OVERSAMPLE 8
 
 #define NOTE_A 
 
@@ -130,9 +130,11 @@ int main(int argc, char **argv)
 				chip_set_noise(0,1);
 	//			chip_set_noise(1,1);
 				break;
+			default:
+				break;
 		}
 	}
 	chip_shutdown();
-	printf("Finished after %d seconds.\n",frame_counter * 60);
+	printf("Finished after %f seconds.\n",frame_counter / 60.0);
 	return 0;
 }

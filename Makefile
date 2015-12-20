@@ -10,7 +10,9 @@ LDFLAGS :=
 AR := ar
 ARFLAGS := cvq
 
-all: libchip.o chipkernel.o libchip.a
+all: chipkernel.o chipkernel.o libchip.a
+
+debug: debugcfg libchip.o chipkernel.o libchip.o libchip.a
 
 chipkernel.o: src/chipkernel.c
 	$(CC) $(CFLAGS) $(INCLUDE) $(LDFLAGS) -c src/chipkernel.c -o chipkernel.o
