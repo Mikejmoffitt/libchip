@@ -1,11 +1,20 @@
 #include "libchip.h"
 #include "chipkernel.h"
 
+#ifdef WANT_DEBUG
+#define DBPRNT printf
+#define DBFPRNT fprintf
+#else
+#define DBPRNT __asm__("nop"); //
+#define DBFPRNT __asm__("nop"); //
+#endif
+
 // User functions
 void chip_shutdown(void)
 {	
 	chip_num_channels = 0;
 	chip_is_init = 0;
+	chip_engine_ptr = NULL;
 	if (chip_thread)
 	{
 		al_set_thread_should_stop(chip_thread);
@@ -56,31 +65,31 @@ static int chip_allegro_setup(void)
 	{
 		if (!al_init())
 		{
-			fprintf(stderr,"[audio] Error: Could not initialize Allegro.\n");
+			DBFPRNT(stderr,"[audio] Error: Could not initialize Allegro.\n");
 			return 0;
 		}
 	}
-	printf("[audio] Allegro is installed\n");
+	DBPRNT("[audio] Allegro is installed\n");
 	if (!al_is_audio_installed())
 	{
 	
 		if (!al_install_audio())
 		{
-			fprintf(stderr,"[audio] Error: Could not install audio addon.\n");
+			DBFPRNT(stderr,"[audio] Error: Could not install audio addon.\n");
 			return 0;
 		}
 	}
-	printf("[audio] Audio addon is installed\n");
+	DBPRNT("[audio] Audio addon is installed\n");
 	// Voice
 	chip_voice = al_create_voice(chip_rate,
 		CHIP_DEPTH,
 		CHIP_CHAN);
 	if (!chip_voice)
 	{
-		fprintf(stderr,"[audio] Error: Failed to create voice.\n");
+		DBFPRNT(stderr,"[audio] Error: Failed to create voice.\n");
 		return 0;
 	}
-	printf("[audio] Created voice at %X\n",(unsigned int)chip_voice);
+	DBPRNT("[audio] Created voice at %X\n",(unsigned int)chip_voice);
 
 	// Mixer
 	chip_mixer = al_create_mixer(chip_rate,
@@ -88,17 +97,17 @@ static int chip_allegro_setup(void)
 		CHIP_CHAN);
 	if (!chip_mixer)
 	{
-		fprintf(stderr,"[audio] Error: Failed to create mixer.\n");
+		DBFPRNT(stderr,"[audio] Error: Failed to create mixer.\n");
 		return 0;
 	}
-	printf("[audio] Created mixer at %X\n",(unsigned int)chip_mixer);
+	DBPRNT("[audio] Created mixer at %X\n",(unsigned int)chip_mixer);
 
 	if (!al_attach_mixer_to_voice(chip_mixer, chip_voice))
 	{
-		fprintf(stderr,"[audio] Error: Failed to attach mixer to voice.\n");
+		DBFPRNT(stderr,"[audio] Error: Failed to attach mixer to voice.\n");
 		return 0;
 	}
-	printf("[audio] Attached mixer to voice\n");
+	DBPRNT("[audio] Attached mixer to voice\n");
 
 	al_set_default_mixer(chip_mixer);
 	al_reserve_samples(chip_frag_num);
@@ -110,20 +119,20 @@ static int chip_allegro_setup(void)
 		chip_rate,
 		CHIP_DEPTH,
 		CHIP_CHAN);
-	printf("[audio] Created stream at %X\n",(unsigned int)chip_stream);
+	DBPRNT("[audio] Created stream at %X\n",(unsigned int)chip_stream);
 	if (!al_attach_audio_stream_to_mixer(chip_stream, al_get_default_mixer()))
 	{
-		printf("[audio] Error: Couldn't attach stream to mixer.\n");
+		DBPRNT("[audio] Error: Couldn't attach stream to mixer.\n");
 		return 0;
 	}
-	printf("[audio] Attached stream to mixer.\n");
+	DBPRNT("[audio] Attached stream to mixer.\n");
 
 	// Set up event source for the audio thread
 	chip_queue = al_create_event_queue();
-	printf("[audio] Created queue at %X\n",(unsigned int)chip_queue);
+	DBPRNT("[audio] Created queue at %X\n",(unsigned int)chip_queue);
 	al_register_event_source(chip_queue, 
 		al_get_audio_stream_event_source(chip_stream));
-	printf("[audio] Registered audio event source with queue.\n");
+	DBPRNT("[audio] Registered audio event source with queue.\n");
 
 	return 1;
 
@@ -133,33 +142,33 @@ static int chip_arg_sanity(void)
 {
 	if (!chip_rate)
 	{
-		fprintf(stderr,"[audio] Error: Invalid sample rate specified.\n");
+		DBFPRNT(stderr,"[audio] Error: Invalid sample rate specified.\n");
 		return 0;
 	}
-	printf("[audio] Sampling rate: %dHz\n",chip_rate);
+	DBPRNT("[audio] Sampling rate: %dHz\n",chip_rate);
 	if (!chip_num_channels)
 	{
-		fprintf(stderr,"[audio] Error: At least one channel must be created.\n");
+		DBFPRNT(stderr,"[audio] Error: At least one channel must be created.\n");
 		return 0;
 	}
-	printf("[audio] Using %d channels\n",chip_num_channels);
+	DBPRNT("[audio] Using %d channels\n",chip_num_channels);
 	if (!chip_frag_size)
 	{
-		fprintf(stderr,"[audio] Warning: No fragment size given. Defaulting to 1024.\n");
+		DBFPRNT(stderr,"[audio] Warning: No fragment size given. Defaulting to 1024.\n");
 		chip_frag_size = CHIP_SIZE_FRAGMENT;
 	}
-	printf("[audio] Using %d for fragment size\n",chip_frag_size);
+	DBPRNT("[audio] Using %d for fragment size\n",chip_frag_size);
 	if (!chip_frag_num)
 	{
-		fprintf(stderr,"[audio] Warning: No fragment number given. Defaulting to 4.\n");
+		DBFPRNT(stderr,"[audio] Warning: No fragment number given. Defaulting to 4.\n");
 		chip_frag_num = CHIP_NUM_FRAGMENTS;
 	}
-	printf("[audio] Using %d fragments\n",chip_frag_num);
+	DBPRNT("[audio] Using %d fragments\n",chip_frag_num);
 	if (!chip_rate_mul)
 	{
 		chip_rate_mul = 1;
 	}
-	printf("[audio] Rate multiplier is %d\n",chip_rate_mul);
+	DBPRNT("[audio] Rate multiplier is %d\n",chip_rate_mul);
 	return 1;
 }
 
@@ -169,7 +178,7 @@ static int chip_channel_init(void)
 	chip_channels = (chip_channel *)calloc(chip_num_channels,sizeof(chip_channel));
 	if (!chip_channels)
 	{
-		fprintf(stderr,"[audio] Couldn't malloc for channel states. Maybe too many have been requested?\n");
+		DBFPRNT(stderr,"[audio] Couldn't malloc for channel states. Maybe too many have been requested?\n");
 		return 0;
 	}
 	for (int i = 0; i < chip_num_channels; i++)
@@ -185,7 +194,7 @@ static int chip_channel_init(void)
 		al_unlock_mutex(ch->mutex);
 	}
 
-	printf("[audio] Created channel states at %X\n",(uint16_t)chip_channels);
+	DBPRNT("[audio] Created channel states at %X\n",(uint16_t)chip_channels);
 	return 1;
 }
 
@@ -219,7 +228,7 @@ void chip_init(unsigned int rate, unsigned int num_channels, unsigned int frag_s
 
 	// Build the thread
 	chip_thread = al_create_thread(chip_func, NULL);
-	printf("[audio] Created audio thread.\n");
+	DBPRNT("[audio] Created audio thread.\n");
 
 	chip_is_init = 1;
 }
@@ -228,11 +237,11 @@ void chip_start(void)
 {
 	if (!chip_is_init)
 	{
-		fprintf(stderr, "[audio] Error: LibChip has not been initialized.\n");
+		DBFPRNT(stderr, "[audio] Error: LibChip has not been initialized.\n");
 		return;
 	}
 	al_start_thread(chip_thread);
-	printf("[audio] Started audio thread.\n");
+	DBPRNT("[audio] Started audio thread.\n");
 }
 
 void chip_set_engine_ptr(void *ptr, unsigned int eng_period)
@@ -255,7 +264,7 @@ void chip_set_freq(unsigned int channel, float f)
 {
 	if (channel >= chip_num_channels)
 	{
-		fprintf(stderr,"[audio] Error: Channel out of range (%d > %d)\n",channel,chip_num_channels);
+		DBFPRNT(stderr,"[audio] Error: Channel out of range (%d > %d)\n",channel,chip_num_channels);
 		return;
 	}
 	chip_channel *ch = &chip_channels[channel];
@@ -266,14 +275,14 @@ void chip_set_freq(unsigned int channel, float f)
 		set_p = 1;
 	}
 	ch->period = set_p;
-	printf("[audio] Set channel %d period to %d\n",channel,set_p);
+	DBPRNT("[audio] Set channel %d period to %d\n",channel,set_p);
 }
 
 void chip_set_period_direct(unsigned int channel, unsigned int period)
 {
 	if (channel >= chip_num_channels)
 	{
-		fprintf(stderr,"[audio] Error: Channel out of range (%d > %d)\n",channel,chip_num_channels);
+		DBFPRNT(stderr,"[audio] Error: Channel out of range (%d > %d)\n",channel,chip_num_channels);
 		return;
 	}
 	chip_channel *ch = &chip_channels[channel];
@@ -288,7 +297,7 @@ void chip_set_amp(unsigned int channel, unsigned int amp_l, unsigned int amp_r)
 {
 	if (channel >= chip_num_channels)
 	{
-		fprintf(stderr,"[audio] Error: Channel out of range (%d > %d)\n",channel,chip_num_channels);
+		DBFPRNT(stderr,"[audio] Error: Channel out of range (%d > %d)\n",channel,chip_num_channels);
 		return;
 	}
 	chip_channel *ch = &chip_channels[channel];
@@ -300,7 +309,7 @@ void chip_set_noise(unsigned int channel, unsigned int noise_en)
 {
 	if (channel >= chip_num_channels)
 	{
-		fprintf(stderr,"[audio] Error: Channel out of range (%d > %d)\n",channel,chip_num_channels);
+		DBFPRNT(stderr,"[audio] Error: Channel out of range (%d > %d)\n",channel,chip_num_channels);
 		return;
 	}
 	chip_channel *ch = &chip_channels[channel];
@@ -311,7 +320,7 @@ void chip_set_loop(unsigned int channel, unsigned int loop_en)
 {
 	if (channel >= chip_num_channels)
 	{
-		fprintf(stderr,"[audio] Error: Channel out of range (%d > %d)\n",channel,chip_num_channels);
+		DBFPRNT(stderr,"[audio] Error: Channel out of range (%d > %d)\n",channel,chip_num_channels);
 		return;
 	}
 	chip_channel *ch = &chip_channels[channel];
@@ -323,7 +332,7 @@ void chip_set_wave(unsigned int channel, uint16_t *wave_data, unsigned int len, 
 {
 	if (channel >= chip_num_channels)
 	{
-		fprintf(stderr,"[audio] Error: Channel out of range (%d > %d)\n",channel,chip_num_channels);
+		DBFPRNT(stderr,"[audio] Error: Channel out of range (%d > %d)\n",channel,chip_num_channels);
 		return;
 	}
 	chip_channel *ch = &chip_channels[channel];
@@ -346,14 +355,14 @@ void chip_create_wave(unsigned int channel, unsigned int len, unsigned int loop_
 {
 	if (channel >= chip_num_channels)
 	{
-		fprintf(stderr,"[audio] Error: Channel out of range (%d > %d)\n",channel,chip_num_channels);
+		DBFPRNT(stderr,"[audio] Error: Channel out of range (%d > %d)\n",channel,chip_num_channels);
 		return;
 	}
 	chip_channel *ch = &chip_channels[channel];
 	al_lock_mutex(ch->mutex);
 	if (!len)
 	{
-		fprintf(stderr,"[audio] Error: Wave length of 0 specified. The engine may crash.\n");
+		DBFPRNT(stderr,"[audio] Error: Wave length of 0 specified. The engine may crash.\n");
 		return;
 	}
 	// Clear out the previous wave if we own it
@@ -373,7 +382,7 @@ void chip_set_wave_pos(unsigned int channel, unsigned int pos)
 {
 	if (channel >= chip_num_channels)
 	{
-		fprintf(stderr,"[audio] Error: Channel out of range (%d > %d)\n",channel,chip_num_channels);
+		DBFPRNT(stderr,"[audio] Error: Channel out of range (%d > %d)\n",channel,chip_num_channels);
 		return;
 	}
 	chip_channel *ch = &chip_channels[channel];
@@ -384,7 +393,7 @@ void chip_set_noise_tap(unsigned int channel, unsigned int tap)
 {
 	if (channel >= chip_num_channels)
 	{
-		fprintf(stderr,"[audio] Error: Channel out of range (%d > %d)\n",channel,chip_num_channels);
+		DBFPRNT(stderr,"[audio] Error: Channel out of range (%d > %d)\n",channel,chip_num_channels);
 		return;
 	}
 	chip_channel *ch = &chip_channels[channel];
@@ -399,7 +408,7 @@ unsigned int chip_get_period(unsigned int channel)
 {
 	if (channel >= chip_num_channels)
 	{
-		fprintf(stderr,"[audio] Error: Channel out of range (%d > %d)\n",channel,chip_num_channels);
+		DBFPRNT(stderr,"[audio] Error: Channel out of range (%d > %d)\n",channel,chip_num_channels);
 		return 0;
 	}
 	chip_channel *ch = &chip_channels[channel];
@@ -409,7 +418,7 @@ unsigned int chip_get_amp(unsigned int channel, unsigned int side)
 {
 	if (channel >= chip_num_channels)
 	{
-		fprintf(stderr,"[audio] Error: Channel out of range (%d > %d)\n",channel,chip_num_channels);
+		DBFPRNT(stderr,"[audio] Error: Channel out of range (%d > %d)\n",channel,chip_num_channels);
 		return 0;
 	}
 	chip_channel *ch = &chip_channels[channel];
@@ -420,7 +429,7 @@ unsigned int chip_get_noise(unsigned int channel)
 {
 	if (channel >= chip_num_channels)
 	{
-		fprintf(stderr,"[audio] Error: Channel out of range (%d > %d)\n",channel,chip_num_channels);
+		DBFPRNT(stderr,"[audio] Error: Channel out of range (%d > %d)\n",channel,chip_num_channels);
 		return 0;
 	}
 	chip_channel *ch = &chip_channels[channel];
@@ -431,7 +440,7 @@ unsigned int chip_get_loop(unsigned int channel)
 {
 	if (channel >= chip_num_channels)
 	{
-		fprintf(stderr,"[audio] Error: Channel out of range (%d > %d)\n",channel,chip_num_channels);
+		DBFPRNT(stderr,"[audio] Error: Channel out of range (%d > %d)\n",channel,chip_num_channels);
 		return 0;
 	}
 	chip_channel *ch = &chip_channels[channel];
@@ -442,7 +451,7 @@ uint16_t *chip_get_wave(unsigned int channel)
 {
 	if (channel >= chip_num_channels)
 	{
-		fprintf(stderr,"[audio] Error: Channel out of range (%d > %d)\n",channel,chip_num_channels);
+		DBFPRNT(stderr,"[audio] Error: Channel out of range (%d > %d)\n",channel,chip_num_channels);
 		return NULL;
 	}
 	chip_channel *ch = &chip_channels[channel];
@@ -453,7 +462,7 @@ unsigned int get_is_user_wave(unsigned int channel)
 {
 	if (channel >= chip_num_channels)
 	{
-		fprintf(stderr,"[audio] Error: Channel out of range (%d > %d)\n",channel,chip_num_channels);
+		DBFPRNT(stderr,"[audio] Error: Channel out of range (%d > %d)\n",channel,chip_num_channels);
 		return 0;
 	}
 	chip_channel *ch = &chip_channels[channel];
@@ -464,7 +473,7 @@ unsigned int chip_get_wave_len(unsigned int channel)
 {
 	if (channel >= chip_num_channels)
 	{
-		fprintf(stderr,"[audio] Error: Channel out of range (%d > %d)\n",channel,chip_num_channels);
+		DBFPRNT(stderr,"[audio] Error: Channel out of range (%d > %d)\n",channel,chip_num_channels);
 		return 0;
 	}
 	chip_channel *ch = &chip_channels[channel];
@@ -475,7 +484,7 @@ chip_channel *chip_get_channel(unsigned int channel)
 {
 	if (channel >= chip_num_channels)
 	{
-		fprintf(stderr,"[audio] Error: Channel out of range (%d > %d)\n",channel,chip_num_channels);
+		DBFPRNT(stderr,"[audio] Error: Channel out of range (%d > %d)\n",channel,chip_num_channels);
 		return 0;
 	}
 	return &chip_channels[channel];
@@ -485,7 +494,7 @@ unsigned int chip_get_wave_pos(unsigned int channel)
 {
 	if (channel >= chip_num_channels)
 	{
-		fprintf(stderr,"[audio] Error: Channel out of range (%d > %d)\n",channel,chip_num_channels);
+		DBFPRNT(stderr,"[audio] Error: Channel out of range (%d > %d)\n",channel,chip_num_channels);
 		return 0;
 	}
 	chip_channel *ch = &chip_channels[channel];
@@ -496,7 +505,7 @@ unsigned int chip_get_noise_tap(unsigned int channel)
 {
 	if (channel >= chip_num_channels)
 	{
-		fprintf(stderr,"[audio] Error: Channel out of range (%d > %d)\n",channel,chip_num_channels);
+		DBFPRNT(stderr,"[audio] Error: Channel out of range (%d > %d)\n",channel,chip_num_channels);
 		return 0;
 	}
 	chip_channel *ch = &chip_channels[channel];

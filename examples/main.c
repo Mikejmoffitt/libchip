@@ -9,7 +9,7 @@
 #define EX_RATE 44100
 #define EX_BUFFER_LEN 256
 #define EX_NUM_BUFFERS 8
-#define EX_OVERSAMPLE 8
+#define EX_OVERSAMPLE 128
 
 static uint16_t wave_tri[] = {
 	0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7,
